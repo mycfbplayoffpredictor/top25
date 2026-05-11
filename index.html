@@ -710,31 +710,16 @@ function onPoolDrop(e) {
   }
 }
 
-function save() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(rankings)); } catch {}
-}
+// No persistence — every page load starts with a blank board so each visit
+// is independent. Clear any state written by earlier versions of the site.
+function save() {}
+function saveAdvancement() {}
 function load() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length === SLOTS) {
-        rankings = parsed.map(id => (id && teamMap.has(id)) ? id : null);
-      }
-    }
-    userName = localStorage.getItem(NAME_KEY) || "";
-    const advRaw = localStorage.getItem(ADVANCEMENT_KEY);
-    if (advRaw) {
-      const a = JSON.parse(advRaw);
-      if (a && Array.isArray(a.r1) && Array.isArray(a.qf) && Array.isArray(a.sf) && Array.isArray(a.champ)) {
-        advancement = a;
-      }
-    }
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(NAME_KEY);
+    localStorage.removeItem(ADVANCEMENT_KEY);
   } catch {}
-}
-
-function saveAdvancement() {
-  try { localStorage.setItem(ADVANCEMENT_KEY, JSON.stringify(advancement)); } catch {}
 }
 
 // Compute the 12-team CFP field from the current Top 25.
@@ -1082,7 +1067,6 @@ function init() {
   nameInput.value = userName;
   nameInput.addEventListener("input", () => {
     userName = nameInput.value;
-    try { localStorage.setItem(NAME_KEY, userName); } catch {}
     updateTitle();
   });
   renderRankings();
