@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CFB Top 25 Builder</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #f85149;
+    --accent-soft: rgba(248, 81, 73, 0.12);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  h1 { margin: 0; font-size: 20px; font-weight: 700; }
+  .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 16px;
+    padding: 16px;
+    height: calc(100vh - 73px);
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel h2 {
+    margin: 0 0 10px 0;
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+  .rankings { overflow-y: auto; padding-right: 4px; flex: 1; }
+  .slot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    min-height: 56px;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  .slot.drag-over { background: var(--accent-soft); border-color: var(--accent); }
+  .slot.empty { background: transparent; }
+  .rank {
+    width: 30px;
+    text-align: right;
+    color: var(--muted);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    padding-right: 4px;
+  }
+  .slot-content { flex: 1; min-height: 48px; display: flex; align-items: center; }
+  .tile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: grab;
+    width: 100%;
+    min-height: 48px;
+    user-select: none;
+    transition: transform 0.05s, box-shadow 0.1s;
+  }
+  .tile:hover { border-color: #484f58; }
+  .tile:active { cursor: grabbing; }
+  .tile.dragging { opacity: 0.35; }
+  .tile .logo, .tile .fallback {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+  }
+  .tile .logo { object-fit: contain; }
+  .tile .fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #30363d;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+  .tile .name {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tile .conf {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .tile .text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .pool-wrap { min-height: 0; }
+  .pool {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 8px;
+    align-content: start;
+    overflow-y: auto;
+    padding-right: 4px;
+    flex: 1;
+  }
+  .pool.drag-over { outline: 2px dashed var(--accent); outline-offset: -6px; border-radius: 6px; }
+  .controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 8px 10px;
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  button {
+    padding: 8px 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  button:hover { background: #30363d; }
+  .count { font-size: 11px; color: var(--muted); margin-left: 6px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; height: auto; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1 id="title">College Football Top 25 Builder</h1>
+    <div class="subtitle">Drag teams from the pool into a slot. Drop into another slot to swap. Drop back in the pool to unrank. <strong>Double-click</strong> a tile to instantly send it to the next empty slot — or back to the pool.</div>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+    <input type="text" id="name" placeholder="Your name" autocomplete="off" style="width:140px;">
+  </div>
+  <div style="display:flex; gap:8px;">
+    <button id="share">Share</button>
+    <button id="copy">Copy Rankings</button>
+    <button id="reset">Reset</button>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="panel">
+    <h2>Top 25 <span id="rank-count" class="count"></span></h2>
+    <div id="rankings" class="rankings"></div>
+  </div>
+  <div class="panel pool-wrap">
+    <h2>Teams <span id="pool-count" class="count"></span></h2>
+    <div class="controls">
+      <input type="text" id="search" placeholder="Filter teams (name or conference)…" autocomplete="off">
+    </div>
+    <div id="pool" class="pool"></div>
+  </div>
+</div>
+
+<script>
+// FBS teams (2025 season). ESPN team IDs power the logo CDN; if a logo fails
+// to load we fall back to a labeled tile so the team is still usable.
+const TEAMS = [
+  { id: "air-force",       name: "Air Force",        abbr: "AF",   conf: "MW",      espn: 2005 },
+  { id: "akron",           name: "Akron",            abbr: "AKR",  conf: "MAC",     espn: 2006 },
+  { id: "alabama",         name: "Alabama",          abbr: "ALA",  conf: "SEC",     espn: 333  },
+  { id: "app-state",       name: "Appalachian State",abbr: "APP",  conf: "Sun Belt",espn: 2026 },
+  { id: "arizona",         name: "Arizona",          abbr: "ARIZ", conf: "Big 12",  espn: 12   },
+  { id: "arizona-state",   name: "Arizona State",    abbr: "ASU",  conf: "Big 12",  espn: 9    },
+  { id: "arkansas",        name: "Arkansas",         abbr: "ARK",  conf: "SEC",     espn: 8    },
+  { id: "arkansas-state",  name: "Arkansas State",   abbr: "ARST", conf: "Sun Belt",espn: 2032 },
+  { id: "army",            name: "Army",             abbr: "ARMY", conf: "AAC",     espn: 349  },
+  { id: "auburn",          name: "Auburn",           abbr: "AUB",  conf: "SEC",     espn: 2    },
+  { id: "ball-state",      name: "Ball State",       abbr: "BALL", conf: "MAC",     espn: 2050 },
+  { id: "baylor",          name: "Baylor",           abbr: "BAY",  conf: "Big 12",  espn: 239  },
+  { id: "boise-state",     name: "Boise State",      abbr: "BSU",  conf: "MW",      espn: 68   },
+  { id: "boston-college",  name: "Boston College",   abbr: "BC",   conf: "ACC",     espn: 103  },
+  { id: "bowling-green",   name: "Bowling Green",    abbr: "BGSU", conf: "MAC",     espn: 189  },
+  { id: "buffalo",         name: "Buffalo",          abbr: "BUFF", conf: "MAC",     espn: 2084 },
+  { id: "byu",             name: "BYU",              abbr: "BYU",  conf: "Big 12",  espn: 252  },
+  { id: "california",      name: "California",       abbr: "CAL",  conf: "ACC",     espn: 25   },
+  { id: "central-michigan",name: "Central Michigan", abbr: "CMU",  conf: "MAC",     espn: 2117 },
+  { id: "charlotte",       name: "Charlotte",        abbr: "CHAR", conf: "AAC",     espn: 2429 },
+  { id: "cincinnati",      name: "Cincinnati",       abbr: "CIN",  conf: "Big 12",  espn: 2132 },
+  { id: "clemson",         name: "Clemson",          abbr: "CLEM", conf: "ACC",     espn: 228  },
+  { id: "coastal-carolina",name: "Coastal Carolina", abbr: "CCU",  conf: "Sun Belt",espn: 324  },
+  { id: "colorado",        name: "Colorado",         abbr: "COLO", conf: "Big 12",  espn: 38   },
+  { id: "colorado-state",  name: "Colorado State",   abbr: "CSU",  conf: "MW",      espn: 36   },
+  { id: "uconn",           name: "UConn",            abbr: "CONN", conf: "Indep.",  espn: 41   },
+  { id: "delaware",        name: "Delaware",         abbr: "DEL",  conf: "C-USA",   espn: 48   },
+  { id: "duke",            name: "Duke",             abbr: "DUKE", conf: "ACC",     espn: 150  },
+  { id: "east-carolina",   name: "East Carolina",    abbr: "ECU",  conf: "AAC",     espn: 151  },
+  { id: "eastern-michigan",name: "Eastern Michigan", abbr: "EMU",  conf: "MAC",     espn: 2199 },
+  { id: "florida",         name: "Florida",          abbr: "FLA",  conf: "SEC",     espn: 57   },
+  { id: "fau",             name: "Florida Atlantic", abbr: "FAU",  conf: "AAC",     espn: 2226 },
+  { id: "fiu",             name: "Florida Intl",     abbr: "FIU",  conf: "C-USA",   espn: 2229 },
+  { id: "florida-state",   name: "Florida State",    abbr: "FSU",  conf: "ACC",     espn: 52   },
+  { id: "fresno-state",    name: "Fresno State",     abbr: "FRES", conf: "MW",      espn: 278  },
+  { id: "georgia",         name: "Georgia",          abbr: "UGA",  conf: "SEC",     espn: 61   },
+  { id: "georgia-southern",name: "Georgia Southern", abbr: "GASO", conf: "Sun Belt",espn: 290  },
+  { id: "georgia-state",   name: "Georgia State",    abbr: "GAST", conf: "Sun Belt",espn: 2247 },
+  { id: "georgia-tech",    name: "Georgia Tech",     abbr: "GT",   conf: "ACC",     espn: 59   },
+  { id: "hawaii",          name: "Hawaii",           abbr: "HAW",  conf: "MW",      espn: 62   },
+  { id: "houston",         name: "Houston",          abbr: "HOU",  conf: "Big 12",  espn: 248  },
+  { id: "illinois",        name: "Illinois",         abbr: "ILL",  conf: "Big Ten", espn: 356  },
+  { id: "indiana",         name: "Indiana",          abbr: "IND",  conf: "Big Ten", espn: 84   },
+  { id: "iowa",            name: "Iowa",             abbr: "IOWA", conf: "Big Ten", espn: 2294 },
+  { id: "iowa-state",      name: "Iowa State",       abbr: "ISU",  conf: "Big 12",  espn: 66   },
+  { id: "jmu",             name: "James Madison",    abbr: "JMU",  conf: "Sun Belt",espn: 256  },
+  { id: "jax-state",       name: "Jacksonville St.", abbr: "JVST", conf: "C-USA",   espn: 55   },
+  { id: "kansas",          name: "Kansas",           abbr: "KU",   conf: "Big 12",  espn: 2305 },
+  { id: "kansas-state",    name: "Kansas State",     abbr: "KSU",  conf: "Big 12",  espn: 2306 },
+  { id: "kennesaw-state",  name: "Kennesaw State",   abbr: "KENN", conf: "C-USA",   espn: 338  },
+  { id: "kent-state",      name: "Kent State",       abbr: "KENT", conf: "MAC",     espn: 2309 },
+  { id: "kentucky",        name: "Kentucky",         abbr: "UK",   conf: "SEC",     espn: 96   },
+  { id: "liberty",         name: "Liberty",          abbr: "LIB",  conf: "C-USA",   espn: 2335 },
+  { id: "louisiana",       name: "Louisiana",        abbr: "ULL",  conf: "Sun Belt",espn: 309  },
+  { id: "la-tech",         name: "Louisiana Tech",   abbr: "LT",   conf: "C-USA",   espn: 2348 },
+  { id: "ulm",             name: "UL Monroe",        abbr: "ULM",  conf: "Sun Belt",espn: 2433 },
+  { id: "louisville",      name: "Louisville",       abbr: "LOU",  conf: "ACC",     espn: 97   },
+  { id: "lsu",             name: "LSU",              abbr: "LSU",  conf: "SEC",     espn: 99   },
+  { id: "marshall",        name: "Marshall",         abbr: "MRSH", conf: "Sun Belt",espn: 276  },
+  { id: "maryland",        name: "Maryland",         abbr: "MD",   conf: "Big Ten", espn: 120  },
+  { id: "umass",           name: "UMass",            abbr: "MASS", conf: "MAC",     espn: 113  },
+  { id: "memphis",         name: "Memphis",          abbr: "MEM",  conf: "AAC",     espn: 235  },
+  { id: "miami",           name: "Miami",            abbr: "MIA",  conf: "ACC",     espn: 2390 },
+  { id: "miami-oh",        name: "Miami (OH)",       abbr: "M-OH", conf: "MAC",     espn: 193  },
+  { id: "michigan",        name: "Michigan",         abbr: "MICH", conf: "Big Ten", espn: 130  },
+  { id: "michigan-state",  name: "Michigan State",   abbr: "MSU",  conf: "Big Ten", espn: 127  },
+  { id: "middle-tennessee",name: "Middle Tennessee", abbr: "MTSU", conf: "C-USA",   espn: 2393 },
+  { id: "minnesota",       name: "Minnesota",        abbr: "MINN", conf: "Big Ten", espn: 135  },
+  { id: "miss-state",      name: "Mississippi State",abbr: "MSST", conf: "SEC",     espn: 344  },
+  { id: "missouri",        name: "Missouri",         abbr: "MIZ",  conf: "SEC",     espn: 142  },
+  { id: "missouri-state",  name: "Missouri State",   abbr: "MOST", conf: "C-USA",   espn: 2623 },
+  { id: "navy",            name: "Navy",             abbr: "NAVY", conf: "AAC",     espn: 2426 },
+  { id: "ncstate",         name: "NC State",         abbr: "NCST", conf: "ACC",     espn: 152  },
+  { id: "nebraska",        name: "Nebraska",         abbr: "NEB",  conf: "Big Ten", espn: 158  },
+  { id: "nevada",          name: "Nevada",           abbr: "NEV",  conf: "MW",      espn: 2440 },
+  { id: "new-mexico",      name: "New Mexico",       abbr: "NM",   conf: "MW",      espn: 167  },
+  { id: "nm-state",        name: "New Mexico State", abbr: "NMSU", conf: "C-USA",   espn: 166  },
+  { id: "unc",             name: "North Carolina",   abbr: "UNC",  conf: "ACC",     espn: 153  },
+  { id: "north-texas",     name: "North Texas",      abbr: "UNT",  conf: "AAC",     espn: 249  },
+  { id: "niu",             name: "Northern Illinois",abbr: "NIU",  conf: "MAC",     espn: 2459 },
+  { id: "northwestern",    name: "Northwestern",     abbr: "NW",   conf: "Big Ten", espn: 77   },
+  { id: "notre-dame",      name: "Notre Dame",       abbr: "ND",   conf: "Indep.",  espn: 87   },
+  { id: "ohio",            name: "Ohio",             abbr: "OHIO", conf: "MAC",     espn: 195  },
+  { id: "ohio-state",      name: "Ohio State",       abbr: "OSU",  conf: "Big Ten", espn: 194  },
+  { id: "oklahoma",        name: "Oklahoma",         abbr: "OU",   conf: "SEC",     espn: 201  },
+  { id: "oklahoma-state",  name: "Oklahoma State",   abbr: "OKST", conf: "Big 12",  espn: 197  },
+  { id: "old-dominion",    name: "Old Dominion",     abbr: "ODU",  conf: "Sun Belt",espn: 295  },
+  { id: "ole-miss",        name: "Ole Miss",         abbr: "MISS", conf: "SEC",     espn: 145  },
+  { id: "oregon",          name: "Oregon",           abbr: "ORE",  conf: "Big Ten", espn: 2483 },
+  { id: "oregon-state",    name: "Oregon State",     abbr: "ORST", conf: "Pac-12",  espn: 204  },
+  { id: "penn-state",      name: "Penn State",       abbr: "PSU",  conf: "Big Ten", espn: 213  },
+  { id: "pitt",            name: "Pittsburgh",       abbr: "PITT", conf: "ACC",     espn: 221  },
+  { id: "purdue",          name: "Purdue",           abbr: "PUR",  conf: "Big Ten", espn: 2509 },
+  { id: "rice",            name: "Rice",             abbr: "RICE", conf: "AAC",     espn: 242  },
+  { id: "rutgers",         name: "Rutgers",          abbr: "RUTG", conf: "Big Ten", espn: 164  },
+  { id: "sam-houston",     name: "Sam Houston",      abbr: "SHSU", conf: "C-USA",   espn: 2534 },
+  { id: "sdsu",            name: "San Diego State",  abbr: "SDSU", conf: "MW",      espn: 21   },
+  { id: "sjsu",            name: "San Jose State",   abbr: "SJSU", conf: "MW",      espn: 23   },
+  { id: "smu",             name: "SMU",              abbr: "SMU",  conf: "ACC",     espn: 2567 },
+  { id: "south-alabama",   name: "South Alabama",    abbr: "USA",  conf: "Sun Belt",espn: 6    },
+  { id: "south-carolina",  name: "South Carolina",   abbr: "SC",   conf: "SEC",     espn: 2579 },
+  { id: "usf",             name: "South Florida",    abbr: "USF",  conf: "AAC",     espn: 58   },
+  { id: "southern-miss",   name: "Southern Miss",    abbr: "USM",  conf: "Sun Belt",espn: 2572 },
+  { id: "stanford",        name: "Stanford",         abbr: "STAN", conf: "ACC",     espn: 24   },
+  { id: "syracuse",        name: "Syracuse",         abbr: "SYR",  conf: "ACC",     espn: 183  },
+  { id: "tcu",             name: "TCU",              abbr: "TCU",  conf: "Big 12",  espn: 2628 },
+  { id: "temple",          name: "Temple",           abbr: "TEM",  conf: "AAC",     espn: 218  },
+  { id: "tennessee",       name: "Tennessee",        abbr: "TENN", conf: "SEC",     espn: 2633 },
+  { id: "texas",           name: "Texas",            abbr: "TEX",  conf: "SEC",     espn: 251  },
+  { id: "texas-am",        name: "Texas A&M",        abbr: "TAMU", conf: "SEC",     espn: 245  },
+  { id: "texas-state",     name: "Texas State",      abbr: "TXST", conf: "Sun Belt",espn: 326  },
+  { id: "texas-tech",      name: "Texas Tech",       abbr: "TTU",  conf: "Big 12",  espn: 2641 },
+  { id: "toledo",          name: "Toledo",           abbr: "TOL",  conf: "MAC",     espn: 2649 },
+  { id: "troy",            name: "Troy",             abbr: "TROY", conf: "Sun Belt",espn: 2653 },
+  { id: "tulane",          name: "Tulane",           abbr: "TUL",  conf: "AAC",     espn: 2655 },
+  { id: "tulsa",           name: "Tulsa",            abbr: "TLSA", conf: "AAC",     espn: 202  },
+  { id: "uab",             name: "UAB",              abbr: "UAB",  conf: "AAC",     espn: 5    },
+  { id: "ucf",             name: "UCF",              abbr: "UCF",  conf: "Big 12",  espn: 2116 },
+  { id: "ucla",            name: "UCLA",             abbr: "UCLA", conf: "Big Ten", espn: 26   },
+  { id: "unlv",            name: "UNLV",             abbr: "UNLV", conf: "MW",      espn: 2439 },
+  { id: "usc",             name: "USC",              abbr: "USC",  conf: "Big Ten", espn: 30   },
+  { id: "utah",            name: "Utah",             abbr: "UTAH", conf: "Big 12",  espn: 254  },
+  { id: "utah-state",      name: "Utah State",       abbr: "USU",  conf: "MW",      espn: 328  },
+  { id: "utep",            name: "UTEP",             abbr: "UTEP", conf: "C-USA",   espn: 2638 },
+  { id: "utsa",            name: "UTSA",             abbr: "UTSA", conf: "AAC",     espn: 2636 },
+  { id: "vanderbilt",      name: "Vanderbilt",       abbr: "VAN",  conf: "SEC",     espn: 238  },
+  { id: "virginia",        name: "Virginia",         abbr: "UVA",  conf: "ACC",     espn: 258  },
+  { id: "virginia-tech",   name: "Virginia Tech",    abbr: "VT",   conf: "ACC",     espn: 259  },
+  { id: "wake-forest",     name: "Wake Forest",      abbr: "WAKE", conf: "ACC",     espn: 154  },
+  { id: "washington",      name: "Washington",       abbr: "WASH", conf: "Big Ten", espn: 264  },
+  { id: "washington-state",name: "Washington State", abbr: "WSU",  conf: "Pac-12",  espn: 265  },
+  { id: "west-virginia",   name: "West Virginia",    abbr: "WVU",  conf: "Big 12",  espn: 277  },
+  { id: "wku",             name: "Western Kentucky", abbr: "WKU",  conf: "C-USA",   espn: 98   },
+  { id: "wmu",             name: "Western Michigan", abbr: "WMU",  conf: "MAC",     espn: 2711 },
+  { id: "wisconsin",       name: "Wisconsin",        abbr: "WIS",  conf: "Big Ten", espn: 275  },
+  { id: "wyoming",         name: "Wyoming",          abbr: "WYO",  conf: "MW",      espn: 2751 }
+];
+
+const STORAGE_KEY = "cfb-top25-rankings-v1";
+const NAME_KEY = "cfb-top25-name-v1";
+const SLOTS = 25;
+let userName = "";
+
+const teamMap = new Map(TEAMS.map(t => [t.id, t]));
+let rankings = new Array(SLOTS).fill(null);
+
+function logoUrl(team) {
+  return `https://a.espncdn.com/i/teamlogos/ncaa/500/${team.espn}.png`;
+}
+
+function buildTile(team) {
+  const tile = document.createElement("div");
+  tile.className = "tile";
+  tile.draggable = true;
+  tile.dataset.teamId = team.id;
+
+  const img = document.createElement("img");
+  img.className = "logo";
+  img.src = logoUrl(team);
+  img.alt = "";
+  img.loading = "lazy";
+  img.onerror = () => {
+    const fallback = document.createElement("div");
+    fallback.className = "fallback";
+    fallback.textContent = team.abbr;
+    img.replaceWith(fallback);
+  };
+  tile.appendChild(img);
+
+  const text = document.createElement("div");
+  text.className = "text";
+  const name = document.createElement("div");
+  name.className = "name";
+  name.textContent = team.name;
+  const conf = document.createElement("div");
+  conf.className = "conf";
+  conf.textContent = team.conf;
+  text.appendChild(name);
+  text.appendChild(conf);
+  tile.appendChild(text);
+
+  tile.addEventListener("dragstart", onDragStart);
+  tile.addEventListener("dragend", onDragEnd);
+  tile.addEventListener("dblclick", onTileDoubleClick);
+  return tile;
+}
+
+function onTileDoubleClick() {
+  const teamId = this.dataset.teamId;
+  const idx = rankings.indexOf(teamId);
+  if (idx >= 0) {
+    rankings[idx] = null;
+  } else {
+    const empty = rankings.indexOf(null);
+    if (empty < 0) return;
+    rankings[empty] = teamId;
+  }
+  save();
+  renderRankings();
+  renderPool();
+}
+
+function onDragStart(e) {
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", this.dataset.teamId);
+  this.classList.add("dragging");
+}
+function onDragEnd() {
+  this.classList.remove("dragging");
+  document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
+}
+
+function renderRankings() {
+  const container = document.getElementById("rankings");
+  container.innerHTML = "";
+  for (let i = 0; i < SLOTS; i++) {
+    const slot = document.createElement("div");
+    slot.className = "slot" + (rankings[i] ? "" : " empty");
+    slot.dataset.slotIndex = i;
+
+    const rank = document.createElement("div");
+    rank.className = "rank";
+    rank.textContent = i + 1;
+    slot.appendChild(rank);
+
+    const content = document.createElement("div");
+    content.className = "slot-content";
+    if (rankings[i]) {
+      const team = teamMap.get(rankings[i]);
+      if (team) content.appendChild(buildTile(team));
+    }
+    slot.appendChild(content);
+
+    slot.addEventListener("dragover", (e) => { e.preventDefault(); slot.classList.add("drag-over"); });
+    slot.addEventListener("dragleave", () => slot.classList.remove("drag-over"));
+    slot.addEventListener("drop", onSlotDrop);
+
+    container.appendChild(slot);
+  }
+  updateCounts();
+}
+
+function renderPool() {
+  const pool = document.getElementById("pool");
+  pool.innerHTML = "";
+  const ranked = new Set(rankings.filter(Boolean));
+  const filter = document.getElementById("search").value.trim().toLowerCase();
+
+  TEAMS.filter(t => !ranked.has(t.id))
+    .filter(t => !filter || t.name.toLowerCase().includes(filter) || t.conf.toLowerCase().includes(filter) || t.abbr.toLowerCase().includes(filter))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach(t => pool.appendChild(buildTile(t)));
+
+  updateCounts();
+}
+
+function updateCounts() {
+  const filled = rankings.filter(Boolean).length;
+  document.getElementById("rank-count").textContent = `(${filled}/${SLOTS})`;
+  document.getElementById("pool-count").textContent = `(${TEAMS.length - filled})`;
+}
+
+function onSlotDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  this.classList.remove("drag-over");
+  const teamId = e.dataTransfer.getData("text/plain");
+  if (!teamId) return;
+  const targetIdx = Number(this.dataset.slotIndex);
+  const sourceIdx = rankings.indexOf(teamId);
+  const occupant = rankings[targetIdx];
+
+  if (sourceIdx === targetIdx) return;
+  if (sourceIdx >= 0) {
+    // Reordering within rankings: swap.
+    rankings[sourceIdx] = occupant;
+    rankings[targetIdx] = teamId;
+  } else {
+    // Coming from pool: place; if occupied, displaced team returns to pool.
+    rankings[targetIdx] = teamId;
+  }
+  save();
+  renderRankings();
+  renderPool();
+}
+
+function onPoolDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  this.classList.remove("drag-over");
+  const teamId = e.dataTransfer.getData("text/plain");
+  if (!teamId) return;
+  const idx = rankings.indexOf(teamId);
+  if (idx >= 0) {
+    rankings[idx] = null;
+    save();
+    renderRankings();
+    renderPool();
+  }
+}
+
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(rankings)); } catch {}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length === SLOTS) {
+        rankings = parsed.map(id => (id && teamMap.has(id)) ? id : null);
+      }
+    }
+    userName = localStorage.getItem(NAME_KEY) || "";
+  } catch {}
+}
+
+function titleText() {
+  return userName.trim()
+    ? `${userName.trim()}'s College Football Top 25`
+    : "College Football Top 25 Builder";
+}
+
+function updateTitle() {
+  document.getElementById("title").textContent = titleText();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function loadLogo(team) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = logoUrl(team);
+  });
+}
+
+async function exportImage() {
+  const btn = document.getElementById("share");
+  const original = btn.textContent;
+  btn.textContent = "Rendering…";
+  btn.disabled = true;
+  try {
+    const W = 1080, H = 608;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle = "#0d1117";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "#e6edf3";
+    ctx.font = "700 26px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    ctx.fillText(titleText(), 24, 38);
+
+    ctx.fillStyle = "#8b949e";
+    ctx.font = "500 12px -apple-system, BlinkMacSystemFont, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(new Date().toLocaleDateString(), W - 24, 38);
+
+    ctx.fillStyle = "#f85149";
+    ctx.fillRect(24, 64, 64, 3);
+
+    const padX = 24;
+    const gridTop = 84;
+    const gridBottom = H - 20;
+    const cols = 5, rows = 5, gap = 8;
+    const cellW = (W - padX * 2 - gap * (cols - 1)) / cols;
+    const cellH = (gridBottom - gridTop - gap * (rows - 1)) / rows;
+
+    const logos = await Promise.all(rankings.map(id => id ? loadLogo(teamMap.get(id)) : null));
+
+    for (let i = 0; i < 25; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = padX + col * (cellW + gap);
+      const y = gridTop + row * (cellH + gap);
+
+      ctx.fillStyle = "#161b22";
+      ctx.strokeStyle = "#30363d";
+      ctx.lineWidth = 1;
+      roundRect(ctx, x, y, cellW, cellH, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#f85149";
+      ctx.font = "700 18px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.textBaseline = "top";
+      ctx.textAlign = "left";
+      ctx.fillText(String(i + 1), x + 10, y + 8);
+
+      const teamId = rankings[i];
+      if (!teamId) continue;
+      const team = teamMap.get(teamId);
+
+      const logoSize = 52;
+      const logoX = x + cellW / 2 - logoSize / 2;
+      const logoY = y + 18;
+      const logo = logos[i];
+      if (logo) {
+        ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+      } else {
+        ctx.fillStyle = "#30363d";
+        roundRect(ctx, logoX, logoY, logoSize, logoSize, 6);
+        ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.font = "700 13px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(team.abbr, logoX + logoSize / 2, logoY + logoSize / 2);
+      }
+
+      ctx.fillStyle = "#e6edf3";
+      ctx.font = "600 12px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      let name = team.name;
+      const maxWidth = cellW - 12;
+      if (ctx.measureText(name).width > maxWidth) {
+        while (name.length > 1 && ctx.measureText(name + "…").width > maxWidth) name = name.slice(0, -1);
+        name += "…";
+      }
+      ctx.fillText(name, x + cellW / 2, logoY + logoSize + 6);
+    }
+
+    await new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) { alert("Export failed"); resolve(); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "cfb-top25.png";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        resolve();
+      }, "image/png");
+    });
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+function init() {
+  load();
+  updateTitle();
+  const nameInput = document.getElementById("name");
+  nameInput.value = userName;
+  nameInput.addEventListener("input", () => {
+    userName = nameInput.value;
+    try { localStorage.setItem(NAME_KEY, userName); } catch {}
+    updateTitle();
+  });
+  renderRankings();
+  renderPool();
+
+  const pool = document.getElementById("pool");
+  pool.addEventListener("dragover", (e) => { e.preventDefault(); pool.classList.add("drag-over"); });
+  pool.addEventListener("dragleave", (e) => { if (e.target === pool) pool.classList.remove("drag-over"); });
+  pool.addEventListener("drop", onPoolDrop);
+
+  document.getElementById("search").addEventListener("input", renderPool);
+
+  document.getElementById("reset").addEventListener("click", () => {
+    if (!confirm("Clear your Top 25?")) return;
+    rankings = new Array(SLOTS).fill(null);
+    save();
+    renderRankings();
+    renderPool();
+  });
+
+  document.getElementById("share").addEventListener("click", exportImage);
+
+  document.getElementById("copy").addEventListener("click", async () => {
+    const lines = rankings.map((id, i) => {
+      const t = id ? teamMap.get(id) : null;
+      return `${i + 1}. ${t ? t.name : "—"}`;
+    }).join("\n");
+    try {
+      await navigator.clipboard.writeText(lines);
+      const btn = document.getElementById("copy");
+      const original = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = original; }, 1200);
+    } catch {
+      alert(lines);
+    }
+  });
+}
+init();
+</script>
+</body>
+</html>
