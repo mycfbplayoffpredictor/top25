@@ -28,9 +28,12 @@
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 16px;
+    flex-wrap: wrap;
   }
+  .header-info { flex: 1 1 320px; min-width: 0; }
+  .header-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .header-controls input { width: 140px; }
   h1 { margin: 0; font-size: 20px; font-weight: 700; }
   .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .layout {
@@ -80,7 +83,21 @@
     font-size: 14px;
     padding-right: 4px;
   }
-  .slot-content { flex: 1; min-height: 48px; display: flex; align-items: center; }
+  .slot-content { flex: 1; min-height: 48px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .slot-actions { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+  .slot:hover .slot-actions { opacity: 1; }
+  .slot-action {
+    width: 26px; height: 22px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; line-height: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .slot-action:hover:not(:disabled) { background: #30363d; color: var(--text); }
+  .slot-action:disabled { opacity: 0.3; cursor: not-allowed; }
   .tile {
     display: flex;
     align-items: center;
@@ -91,8 +108,11 @@
     border-radius: 8px;
     cursor: grab;
     width: 100%;
+    flex: 1 1 0;
+    min-width: 0;
     min-height: 48px;
     user-select: none;
+    touch-action: manipulation;
     transition: transform 0.05s, box-shadow 0.1s;
   }
   .tile:hover { border-color: #484f58; }
@@ -241,23 +261,64 @@
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: #484f58; }
 
-  @media (max-width: 800px) {
-    .layout { grid-template-columns: 1fr; height: auto; }
+  @media (pointer: coarse) {
+    .slot-actions { opacity: 1; }
+    .tile { cursor: pointer; }
+  }
+
+  @media (max-width: 900px) {
+    header { padding: 12px 14px; gap: 10px; }
+    h1 { font-size: 17px; }
+    .subtitle { font-size: 11px; line-height: 1.35; }
+    .header-controls { width: 100%; }
+    .header-controls input { flex: 1 1 100%; width: auto; }
+    .header-controls button { flex: 1; padding: 10px 6px; font-size: 12px; min-width: 0; }
+
+    .layout {
+      grid-template-columns: 1fr;
+      height: auto;
+      padding: 10px;
+      gap: 10px;
+    }
+    .right-stack { overflow: visible; gap: 10px; }
+    .panel { max-height: 78vh; }
+    .playoff-wrap, .pool-wrap { flex: none; min-height: 0; }
+    .panel h2 { font-size: 11px; margin-bottom: 8px; }
+    .hint { display: block; margin-left: 0; margin-top: 2px; }
+
+    .bracket {
+      grid-template-columns: 170px 170px 170px 150px;
+      overflow-x: auto;
+      overflow-y: auto;
+      gap: 6px;
+    }
+    .matchup-slot { min-height: 30px; font-size: 12px; }
+
+    .pool { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .tile { min-height: 52px; }
+    .tile .name { font-size: 12px; }
+    .slot-actions { opacity: 1; }
+    .slot-action { width: 30px; height: 26px; font-size: 10px; }
+  }
+
+  @media (max-width: 480px) {
+    header { padding: 10px 12px; }
+    .layout { padding: 8px; }
+    .panel { padding: 10px; max-height: 80vh; }
+    .pool { grid-template-columns: 1fr 1fr; }
   }
 </style>
 </head>
 <body>
 <header>
-  <div>
+  <div class="header-info">
     <h1 id="title">College Football Top 25 Builder</h1>
-    <div class="subtitle">Drag teams from the pool into a slot. Drop into another slot to swap. Drop back in the pool to unrank. <strong>Double-click</strong> a tile to instantly send it to the next empty slot — or back to the pool.</div>
+    <div class="subtitle"><strong>Tap</strong> a team to add it to the next empty slot — tap again to remove. Use the ↑↓ buttons to reorder. On desktop, you can also drag tiles directly.</div>
   </div>
-  <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
-    <input type="text" id="name" placeholder="Your name" autocomplete="off" style="width:140px;">
-  </div>
-  <div style="display:flex; gap:8px;">
+  <div class="header-controls">
+    <input type="text" id="name" placeholder="Your name" autocomplete="off">
     <button id="share">Share</button>
-    <button id="copy">Copy Rankings</button>
+    <button id="copy">Copy</button>
     <button id="reset">Reset</button>
   </div>
 </header>
@@ -473,12 +534,16 @@ function buildTile(team) {
 
   tile.addEventListener("dragstart", onDragStart);
   tile.addEventListener("dragend", onDragEnd);
+  tile.addEventListener("click", onTileClick);
   tile.addEventListener("dblclick", onTileDoubleClick);
   return tile;
 }
 
-function onTileDoubleClick() {
-  const teamId = this.dataset.teamId;
+function isTouchDevice() {
+  return window.matchMedia("(pointer: coarse)").matches;
+}
+
+function toggleTeam(teamId) {
   const idx = rankings.indexOf(teamId);
   if (idx >= 0) {
     rankings[idx] = null;
@@ -487,6 +552,56 @@ function onTileDoubleClick() {
     if (empty < 0) return;
     rankings[empty] = teamId;
   }
+  save();
+  renderRankings();
+  renderPool();
+}
+
+function onTileClick(e) {
+  if (e.target.closest(".slot-action")) return;
+  // Single-tap toggle is the touch-device behavior. Desktop uses drag/dblclick.
+  if (!isTouchDevice()) return;
+  e.preventDefault();
+  toggleTeam(this.dataset.teamId);
+}
+
+function onTileDoubleClick(e) {
+  if (e.target.closest(".slot-action")) return;
+  // On touch the click handler already fired; skip to avoid a second toggle.
+  if (isTouchDevice()) return;
+  toggleTeam(this.dataset.teamId);
+}
+
+function buildSlotActions(slotIdx) {
+  const wrap = document.createElement("div");
+  wrap.className = "slot-actions";
+
+  const up = document.createElement("button");
+  up.type = "button";
+  up.className = "slot-action";
+  up.textContent = "▲";
+  up.title = "Move up";
+  up.disabled = slotIdx === 0;
+  up.addEventListener("click", (e) => { e.stopPropagation(); moveRanked(slotIdx, -1); });
+
+  const down = document.createElement("button");
+  down.type = "button";
+  down.className = "slot-action";
+  down.textContent = "▼";
+  down.title = "Move down";
+  down.disabled = slotIdx === SLOTS - 1;
+  down.addEventListener("click", (e) => { e.stopPropagation(); moveRanked(slotIdx, 1); });
+
+  wrap.append(up, down);
+  return wrap;
+}
+
+function moveRanked(idx, dir) {
+  const target = idx + dir;
+  if (target < 0 || target >= SLOTS) return;
+  const tmp = rankings[target];
+  rankings[target] = rankings[idx];
+  rankings[idx] = tmp;
   save();
   renderRankings();
   renderPool();
@@ -519,7 +634,10 @@ function renderRankings() {
     content.className = "slot-content";
     if (rankings[i]) {
       const team = teamMap.get(rankings[i]);
-      if (team) content.appendChild(buildTile(team));
+      if (team) {
+        content.appendChild(buildTile(team));
+        content.appendChild(buildSlotActions(i));
+      }
     }
     slot.appendChild(content);
 
