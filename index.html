@@ -130,6 +130,72 @@
   }
   .tile .text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
   .pool-wrap { min-height: 0; }
+  .right-stack { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow: hidden; }
+  .playoff-wrap, .pool-wrap { flex: 1; min-height: 0; }
+  .hint { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); font-size: 11px; margin-left: 8px; }
+  .bracket {
+    display: grid;
+    grid-template-columns: 1.1fr 1.1fr 1fr 0.85fr;
+    gap: 10px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .round {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    gap: 6px;
+    min-height: 0;
+  }
+  .round-label {
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    text-align: center;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .matchup {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .matchup-slot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    min-height: 26px;
+    transition: background 0.1s;
+  }
+  .matchup-slot:not(.empty):hover { background: rgba(255,255,255,0.05); }
+  .matchup-slot.winner { background: rgba(248, 81, 73, 0.22); box-shadow: inset 2px 0 0 var(--accent); }
+  .matchup-slot.empty { color: var(--muted); cursor: default; font-style: italic; }
+  .matchup-slot .seed { width: 16px; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0; text-align: right; font-size: 10px; }
+  .matchup-slot.winner .seed { color: var(--accent); }
+  .matchup-slot img.mini, .matchup-slot .mini-fallback {
+    width: 18px; height: 18px; flex-shrink: 0; object-fit: contain;
+  }
+  .matchup-slot .mini-fallback {
+    background: #30363d; border-radius: 3px; display: flex; align-items: center; justify-content: center;
+    font-size: 8px; font-weight: 700; color: #fff;
+  }
+  .matchup-slot .mname { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .matchup-slot .badge {
+    font-size: 8px; color: var(--accent); font-weight: 700; padding: 1px 4px;
+    border: 1px solid var(--accent); border-radius: 3px; flex-shrink: 0;
+  }
+  .trophy { text-align: center; font-size: 12px; color: var(--accent); font-weight: 700; padding: 8px 4px 0; }
   .pool {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
@@ -201,12 +267,18 @@
     <h2>Top 25 <span id="rank-count" class="count"></span></h2>
     <div id="rankings" class="rankings"></div>
   </div>
-  <div class="panel pool-wrap">
-    <h2>Teams <span id="pool-count" class="count"></span></h2>
-    <div class="controls">
-      <input type="text" id="search" placeholder="Filter teams (name or conference)…" autocomplete="off">
+  <div class="right-stack">
+    <div class="panel playoff-wrap">
+      <h2>12-Team Playoff <span class="hint">auto-seeded from your Top 25 · click a team to advance</span></h2>
+      <div id="bracket" class="bracket"></div>
     </div>
-    <div id="pool" class="pool"></div>
+    <div class="panel pool-wrap">
+      <h2>Teams <span id="pool-count" class="count"></span></h2>
+      <div class="controls">
+        <input type="text" id="search" placeholder="Filter teams (name or conference)…" autocomplete="off">
+      </div>
+      <div id="pool" class="pool"></div>
+    </div>
   </div>
 </div>
 
@@ -354,8 +426,12 @@ const TEAMS = [
 
 const STORAGE_KEY = "cfb-top25-rankings-v1";
 const NAME_KEY = "cfb-top25-name-v1";
+const ADVANCEMENT_KEY = "cfb-top25-advancement-v1";
 const SLOTS = 25;
+const P4 = ["ACC", "Big Ten", "Big 12", "SEC"];
+const G6 = ["AAC", "MW", "MAC", "Sun Belt", "C-USA", "Pac-12"];
 let userName = "";
+let advancement = { r1: [null, null, null, null], qf: [null, null, null, null], sf: [null, null], champ: [null] };
 
 const teamMap = new Map(TEAMS.map(t => [t.id, t]));
 let rankings = new Array(SLOTS).fill(null);
@@ -454,6 +530,7 @@ function renderRankings() {
     container.appendChild(slot);
   }
   updateCounts();
+  renderBracket();
 }
 
 function renderPool() {
@@ -528,7 +605,215 @@ function load() {
       }
     }
     userName = localStorage.getItem(NAME_KEY) || "";
+    const advRaw = localStorage.getItem(ADVANCEMENT_KEY);
+    if (advRaw) {
+      const a = JSON.parse(advRaw);
+      if (a && Array.isArray(a.r1) && Array.isArray(a.qf) && Array.isArray(a.sf) && Array.isArray(a.champ)) {
+        advancement = a;
+      }
+    }
   } catch {}
+}
+
+function saveAdvancement() {
+  try { localStorage.setItem(ADVANCEMENT_KEY, JSON.stringify(advancement)); } catch {}
+}
+
+// Compute the 12-team CFP field from the current Top 25.
+// Rules: 4 P4 conf champs (highest-ranked team per conference) + 1 G6 champ
+// (highest-ranked Group of 6 team) + 7 at-large picks. Top 4 seeds get byes.
+function buildBracket() {
+  const ranked = rankings.filter(Boolean).map(id => teamMap.get(id)).filter(Boolean);
+  const champByConf = new Map();
+  for (const t of ranked) if (!champByConf.has(t.conf)) champByConf.set(t.conf, t);
+
+  const autoBids = [];
+  for (const c of P4) if (champByConf.has(c)) autoBids.push(champByConf.get(c));
+  for (const t of ranked) {
+    if (G6.includes(t.conf)) { autoBids.push(t); break; }
+  }
+
+  const autoBidIds = new Set(autoBids.map(t => t.id));
+  const atLarges = ranked.filter(t => !autoBidIds.has(t.id)).slice(0, 7);
+
+  const field = [...autoBids, ...atLarges];
+  field.sort((a, b) => rankings.indexOf(a.id) - rankings.indexOf(b.id));
+  const seeds = field.slice(0, 12);
+  while (seeds.length < 12) seeds.push(null);
+
+  return { seeds, autoBidIds };
+}
+
+// R1[0]=5v12, R1[1]=6v11, R1[2]=7v10, R1[3]=8v9 (seed indices 4-11).
+// QF[0]=#1 vs R1[3], QF[1]=#4 vs R1[0], QF[2]=#2 vs R1[2], QF[3]=#3 vs R1[1].
+// SF[0]=QF[0] vs QF[1] (top half), SF[1]=QF[2] vs QF[3] (bottom half).
+const R1_PAIRS = [[4, 11], [5, 10], [6, 9], [7, 8]];
+const QF_DEPS  = [{ seedIdx: 0, r1: 3 }, { seedIdx: 3, r1: 0 }, { seedIdx: 1, r1: 2 }, { seedIdx: 2, r1: 1 }];
+
+function pruneAdvancement(seeds) {
+  for (let i = 0; i < 4; i++) {
+    const valid = new Set(R1_PAIRS[i].map(idx => seeds[idx] && seeds[idx].id).filter(Boolean));
+    if (advancement.r1[i] && !valid.has(advancement.r1[i])) advancement.r1[i] = null;
+  }
+  for (let i = 0; i < 4; i++) {
+    const valid = new Set();
+    if (seeds[QF_DEPS[i].seedIdx]) valid.add(seeds[QF_DEPS[i].seedIdx].id);
+    if (advancement.r1[QF_DEPS[i].r1]) valid.add(advancement.r1[QF_DEPS[i].r1]);
+    if (advancement.qf[i] && !valid.has(advancement.qf[i])) advancement.qf[i] = null;
+  }
+  for (let i = 0; i < 2; i++) {
+    const valid = new Set([advancement.qf[i*2], advancement.qf[i*2+1]].filter(Boolean));
+    if (advancement.sf[i] && !valid.has(advancement.sf[i])) advancement.sf[i] = null;
+  }
+  const champValid = new Set(advancement.sf.filter(Boolean));
+  if (advancement.champ[0] && !champValid.has(advancement.champ[0])) advancement.champ[0] = null;
+}
+
+function setWinner(round, idx, teamId) {
+  if (advancement[round][idx] === teamId) advancement[round][idx] = null;
+  else advancement[round][idx] = teamId;
+  pruneAdvancement(buildBracket().seeds);
+  saveAdvancement();
+  renderBracket();
+}
+
+function buildSlot(team, seedNum, isWinner, autoBidIds, onClick) {
+  const slot = document.createElement("div");
+  slot.className = "matchup-slot" + (isWinner ? " winner" : "");
+  if (!team) {
+    slot.classList.add("empty");
+    slot.innerHTML = `<span class="seed"></span><span class="mname">TBD</span>`;
+    return slot;
+  }
+  const seedSpan = document.createElement("span");
+  seedSpan.className = "seed";
+  seedSpan.textContent = seedNum != null ? seedNum : "";
+
+  const img = document.createElement("img");
+  img.className = "mini";
+  img.src = logoUrl(team);
+  img.alt = "";
+  img.loading = "lazy";
+  img.onerror = () => {
+    const fb = document.createElement("div");
+    fb.className = "mini-fallback";
+    fb.textContent = team.abbr;
+    img.replaceWith(fb);
+  };
+
+  const name = document.createElement("span");
+  name.className = "mname";
+  name.textContent = team.name;
+
+  slot.appendChild(seedSpan);
+  slot.appendChild(img);
+  slot.appendChild(name);
+
+  if (autoBidIds && autoBidIds.has(team.id)) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.title = "Conference champion (auto-bid)";
+    badge.textContent = "CC";
+    slot.appendChild(badge);
+  }
+  if (onClick) slot.addEventListener("click", onClick);
+  return slot;
+}
+
+function makeRoundLabel(text) {
+  const el = document.createElement("div");
+  el.className = "round-label";
+  el.textContent = text;
+  return el;
+}
+
+function seedNumOf(seeds, team) {
+  if (!team) return null;
+  const i = seeds.findIndex(s => s && s.id === team.id);
+  return i >= 0 ? i + 1 : null;
+}
+
+function renderBracket() {
+  const { seeds, autoBidIds } = buildBracket();
+  pruneAdvancement(seeds);
+  saveAdvancement();
+
+  const container = document.getElementById("bracket");
+  if (!container) return;
+  container.innerHTML = "";
+
+  function renderMatchup(teamA, seedA, teamB, seedB, round, idx) {
+    const m = document.createElement("div");
+    m.className = "matchup";
+    const winnerId = advancement[round][idx];
+    m.appendChild(buildSlot(teamA, seedA, !!(teamA && winnerId === teamA.id), autoBidIds,
+      teamA ? () => setWinner(round, idx, teamA.id) : null));
+    m.appendChild(buildSlot(teamB, seedB, !!(teamB && winnerId === teamB.id), autoBidIds,
+      teamB ? () => setWinner(round, idx, teamB.id) : null));
+    return m;
+  }
+
+  // First Round
+  const r1 = document.createElement("div");
+  r1.className = "round";
+  r1.appendChild(makeRoundLabel("First Round"));
+  // Visual order top→bottom aligns with bracket flow
+  const r1Order = [
+    { idx: 3, a: 7, b: 8,  sA: 8, sB: 9  }, // 8 vs 9
+    { idx: 0, a: 4, b: 11, sA: 5, sB: 12 }, // 5 vs 12
+    { idx: 2, a: 6, b: 9,  sA: 7, sB: 10 }, // 7 vs 10
+    { idx: 1, a: 5, b: 10, sA: 6, sB: 11 }, // 6 vs 11
+  ];
+  for (const m of r1Order) r1.appendChild(renderMatchup(seeds[m.a], m.sA, seeds[m.b], m.sB, "r1", m.idx));
+  container.appendChild(r1);
+
+  // Quarterfinals
+  const qf = document.createElement("div");
+  qf.className = "round";
+  qf.appendChild(makeRoundLabel("Quarterfinals"));
+  const qfOrder = [
+    { idx: 0, seedIdx: 0, sA: 1, fromR1: 3 }, // 1 vs r1[3]
+    { idx: 1, seedIdx: 3, sA: 4, fromR1: 0 }, // 4 vs r1[0]
+    { idx: 2, seedIdx: 1, sA: 2, fromR1: 2 }, // 2 vs r1[2]
+    { idx: 3, seedIdx: 2, sA: 3, fromR1: 1 }, // 3 vs r1[1]
+  ];
+  for (const m of qfOrder) {
+    const teamA = seeds[m.seedIdx];
+    const r1Win = advancement.r1[m.fromR1];
+    const teamB = r1Win ? teamMap.get(r1Win) : null;
+    qf.appendChild(renderMatchup(teamA, m.sA, teamB, seedNumOf(seeds, teamB), "qf", m.idx));
+  }
+  container.appendChild(qf);
+
+  // Semifinals
+  const sf = document.createElement("div");
+  sf.className = "round";
+  sf.appendChild(makeRoundLabel("Semifinals"));
+  for (let i = 0; i < 2; i++) {
+    const wA = advancement.qf[i*2], wB = advancement.qf[i*2+1];
+    const tA = wA ? teamMap.get(wA) : null;
+    const tB = wB ? teamMap.get(wB) : null;
+    sf.appendChild(renderMatchup(tA, seedNumOf(seeds, tA), tB, seedNumOf(seeds, tB), "sf", i));
+  }
+  container.appendChild(sf);
+
+  // Championship
+  const fc = document.createElement("div");
+  fc.className = "round";
+  fc.appendChild(makeRoundLabel("National Title"));
+  const cA = advancement.sf[0] ? teamMap.get(advancement.sf[0]) : null;
+  const cB = advancement.sf[1] ? teamMap.get(advancement.sf[1]) : null;
+  fc.appendChild(renderMatchup(cA, seedNumOf(seeds, cA), cB, seedNumOf(seeds, cB), "champ", 0));
+  if (advancement.champ[0]) {
+    const t = teamMap.get(advancement.champ[0]);
+    if (t) {
+      const trophy = document.createElement("div");
+      trophy.className = "trophy";
+      trophy.textContent = "🏆 " + t.name;
+      fc.appendChild(trophy);
+    }
+  }
+  container.appendChild(fc);
 }
 
 function titleText() {
